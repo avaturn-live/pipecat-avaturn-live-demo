@@ -1,0 +1,68 @@
+# Pipecat Cloud deployment manifest.
+# Schema reference: https://docs.pipecat.ai/api-reference/cli/cloud/deploy
+#
+# Deploy flow:
+#
+#     pcc auth login
+#     pcc secrets set avaturn-live-demo OPENAI_API_KEY=sk-...
+#     pcc deploy --yes
+#
+# Once deployed, your session broker (server.py / your own backend) starts
+# each session by calling:
+#
+#     POST https://api.pipecat.daily.co/v1/public/avaturn-live-demo/start
+#     Authorization: Bearer pk_your_public_key
+#     { "transport": "websocket" }
+#
+# which returns { "token", "wsUrl", "sessionId" }. The broker then creates
+# an Avaturn Live session with `conversation_engine.url = "{wsUrl}/{token}"`.
+# PCC validates the HMAC token before accepting the WebSocket — invalid or
+# expired tokens are rejected with HTTP 403 *before* `bot()` is invoked, so
+# the agent itself stays auth-free.
+
+agent_name = "avaturn-live-demo"
+
+# Compute tier. Audio-only pipelines fit comfortably on agent-1x.
+agent_profile = "agent-1x"
+
+# Pin a region to keep latency to Avaturn Live predictable. Available:
+# us-west, us-east, eu-central, ap-south.
+region = "us-east"
+
+# Name of a secret set created with `pcc secrets set --secret-set ...`.
+# At minimum it must contain OPENAI_API_KEY. Define any extra knobs the
+# agent reads from env (OPENAI_REALTIME_MODEL, SYSTEM_PROMPT, etc.) here.
+secret_set = "avaturn-live-demo"
+
+# Reject WebSocket connections that don't present a valid /start-issued
+# HMAC token. The token is one-time-use and expires 5 minutes after issue.
+websocket_auth = "token"
+
+# Hard cap on session length (seconds). Aligns with Avaturn Live's own
+# max_duration default of 3600 and stops runaway costs if a client wedges
+# the WebSocket open.
+max_session_duration = 3600
+
+[scaling]
+# Cold start is ≈ 10 s. Keep at 0 for dev / cost optimisation; raise to 1+
+# in production so the first user doesn't stare at a "connecting…" spinner.
+min_agents = 0
+max_agents = 5
+
+[build]
+context_dir = "."
+dockerfile = "Dockerfile"
+
+[build.exclude]
+# Don't ship the broker, frontend, or local dev artifacts into the agent
+# image. The agent only needs bot.py + pipecat_avaturn/.
+patterns = [
+    "*.md",
+    ".env*",
+    ".github/",
+    "tests/",
+    "frontend/",
+    "server.py",
+    "compose.yml",
+    "Dockerfile.server",
+]

@@ -1,0 +1,45 @@
+# Deploy the Pipecat agent to Pipecat Cloud on every push to main.
+#
+# Uses cloud-build mode: PCC builds the image server-side from this repo's
+# Dockerfile, no container registry needed. Build cache is content-hashed,
+# so repeated deploys without code changes are nearly instant.
+#
+# Required GitHub secrets:
+#   PCC_API_KEY  — Pipecat Cloud private API key. Repository or org secret.
+#
+# Pre-requisite: create the `avaturn-live-demo` secret set in PCC and put
+# OPENAI_API_KEY (and any other agent env you want) there:
+#
+#     pcc secrets set --secret-set avaturn-live-demo OPENAI_API_KEY=sk-...
+#
+# The action only deploys the *agent* (bot.py + pipecat_avaturn/). The
+# session broker (server.py) lives wherever you run your own backend.
+
+name: Deploy agent to Pipecat Cloud
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "bot.py"
+      - "pipecat_avaturn/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "Dockerfile"
+      - "pcc-deploy.toml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        uses: daily-co/pipecat-cloud-deploy-action@v2
+        with:
+          api-key: ${{ secrets.PCC_API_KEY }}
+          agent-name: avaturn-live-demo
+          cloud-build: true
+          secret-set: avaturn-live-demo

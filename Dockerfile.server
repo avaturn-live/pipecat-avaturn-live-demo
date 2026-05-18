@@ -1,0 +1,31 @@
+# Standalone image for self-hosting (no Pipecat Cloud).
+#
+# Single process: session broker + Pipecat conversation engine + demo
+# frontend, served by uvicorn. Suitable for Fly.io, Render, Railway,
+# bare k8s, or `docker compose up`.
+
+FROM python:3.12-slim AS base
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Cache deps separately from source for faster rebuilds.
+COPY pyproject.toml uv.lock /app/
+RUN uv sync --frozen --no-install-project --no-dev
+
+COPY pipecat_avaturn /app/pipecat_avaturn
+COPY server.py /app/server.py
+COPY bot.py /app/bot.py
+COPY frontend /app/frontend
+RUN uv sync --frozen --no-dev
+
+ENV PATH="/app/.venv/bin:${PATH}"
+
+EXPOSE 8000
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]

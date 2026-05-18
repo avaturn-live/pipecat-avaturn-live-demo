@@ -1,0 +1,25 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  # Optional: expose the conversation engine to the public internet so
+  # Avaturn Live can reach it from anywhere. Uses cloudflared in
+  # quick-tunnel mode; the printed URL goes into CONVERSATION_ENGINE_PUBLIC_URL.
+  # quick-tunnel mode; the tunnel URL is printed in the container logs and
+  # should be copied into CONVERSATION_ENGINE_PUBLIC_URL (as a wss:// URL,
+  # which Cloudflare upgrades automatically) before restarting `server`.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://server:8000
+    depends_on:
+      - server
+    profiles:
+      - tunnel
+    restart: unless-stopped
