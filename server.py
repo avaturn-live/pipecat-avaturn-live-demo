@@ -58,8 +58,14 @@ async def _lifespan(app: FastAPI):  # noqa: ARG001
             s.pipecat_cloud_agent_name,
         )
     else:
+        logger.info("Pipeline: {}", s.pipeline)
         if not s.openai_api_key.get_secret_value():
             logger.warning("OPENAI_API_KEY is empty — the WS endpoint will fail.")
+        if s.pipeline == "cascaded" and not s.cartesia_api_key.get_secret_value():
+            logger.warning(
+                "PIPELINE=cascaded but CARTESIA_API_KEY is empty — the WS "
+                "endpoint will fail at first user utterance."
+            )
         if s.conversation_engine_shared_secret is None:
             logger.warning(
                 "CONVERSATION_ENGINE_SHARED_SECRET is not set — anyone who finds "

@@ -28,9 +28,15 @@ flowchart TB
     class Browser,Avaturn ext
 ```
 
-The default pipeline is **OpenAI Realtime** (speech-to-speech in one
-service); see `pipecat_avaturn/agent.py` to swap in a cascaded
-STT → LLM → TTS pipeline.
+Two pipelines ship in this repo, selected by the `PIPELINE` env var:
+
+| `PIPELINE`         | Stack                                                                                    |
+|--------------------|------------------------------------------------------------------------------------------|
+| `openai_realtime`  | OpenAI Realtime (speech-to-speech in one service) — the **default**.                     |
+| `cascaded`         | Cartesia Ink Whisper STT → OpenAI `gpt-5.5` via the Responses API → Cartesia Sonic 3.5 TTS, with local Smart Turn V3 end-of-turn detection. Set `CARTESIA_API_KEY` to enable. |
+
+Everything below the pipeline (transport, segment processor, wire format)
+is identical for both modes.
 
 ---
 
@@ -107,8 +113,16 @@ own backend (or this repo's `server.py`) and holds `AVATURN_LIVE_API_KEY`.
 ```bash
 pcc auth login
 pcc secrets set avaturn-live-demo OPENAI_API_KEY=sk-...
+# When PIPELINE=cascaded, also set the Cartesia key as a pcc secret:
+# pcc secrets set avaturn-live-demo CARTESIA_API_KEY=...
+# (And `PIPELINE=cascaded` itself — secrets double as the agent's env.)
 pcc deploy --yes
 ```
+
+> The cascaded pipeline's keys (`CARTESIA_API_KEY`, optionally
+> `OPENAI_LLM_MODEL` / `CARTESIA_VOICE` overrides) live in **pcc secrets** in
+> PCC mode — never in `.env`. The local `.env` is only consulted by the
+> self-host process (`server.py`).
 
 `pcc-deploy.toml` already sets `websocket_auth = "token"`, so PCC issues
 a short-lived HMAC token per session and rejects unauthenticated WS
@@ -188,6 +202,13 @@ glue (the FastAPI server, the demo frontend, the Dockerfiles).
 
 All settings are read from environment variables (or `.env`).
 
+The **broker** vars (`AVATURN_LIVE_*`, `CONVERSATION_ENGINE_*`,
+`PIPECAT_CLOUD_*`) always live in `.env` of whichever process runs the
+broker. The **agent** vars (`OPENAI_API_KEY`, `CARTESIA_API_KEY`,
+`PIPELINE`, model/voice overrides, `SYSTEM_PROMPT`) live in `.env` for
+self-host and in **pcc secrets** for Pipecat Cloud deployments — never
+both at once.
+
 | Variable                              | Purpose                                            |
 |---------------------------------------|----------------------------------------------------|
 | `AVATURN_LIVE_API_KEY`                | Avaturn Live project API key (broker only)         |
@@ -198,11 +219,17 @@ All settings are read from environment variables (or `.env`).
 | `CONVERSATION_ENGINE_SHARED_SECRET`   | Bearer token Avaturn Live must send. Required when the engine is internet-facing — without it, anyone who finds the WS URL can attach. |
 | `PIPECAT_CLOUD_PUBLIC_KEY`            | PCC project public key (only in PCC mode)          |
 | `PIPECAT_CLOUD_AGENT_NAME`            | Deployed PCC agent name (only in PCC mode)         |
-| `OPENAI_API_KEY`                      | OpenAI Realtime API key (agent only)               |
+| `PIPELINE`                            | `openai_realtime` (default) or `cascaded`          |
+| `OPENAI_API_KEY`                      | OpenAI API key (both pipelines)                    |
 | `OPENAI_REALTIME_MODEL`               | Realtime model, e.g. `gpt-realtime-1.5`            |
 | `OPENAI_REALTIME_VOICE`               | Realtime voice (`alloy`, `echo`, …)                |
+| `OPENAI_LLM_MODEL`                    | Cascaded LLM model (Responses API), default `gpt-5.5` |
+| `CARTESIA_API_KEY`                    | Cartesia API key (required when `PIPELINE=cascaded`) |
+| `CARTESIA_STT_MODEL`                  | Cartesia STT model, default `ink-whisper`          |
+| `CARTESIA_TTS_MODEL`                  | Cartesia TTS model, default `sonic-3.5`            |
+| `CARTESIA_VOICE`                      | Cartesia voice id, default Katie                   |
+| `CARTESIA_LANGUAGE`                   | Cartesia STT/TTS language, default `en`            |
 | `SYSTEM_PROMPT`                       | System prompt the LLM is bootstrapped with         |
-| `USER_AUDIO_SAMPLE_RATE`              | Mic audio rate (16000 or 24000)                    |
 
 ---
 

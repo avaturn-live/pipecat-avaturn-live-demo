@@ -1081,6 +1081,9 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+cartesia = [
+    { name = "websockets" },
+]
 openai = [
     { name = "websockets" },
 ]
@@ -1097,7 +1100,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "loguru" },
-    { name = "pipecat-ai", extra = ["openai", "websocket"] },
+    { name = "pipecat-ai", extra = ["cartesia", "openai", "websocket"] },
     { name = "pipecatcloud" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1118,7 +1121,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.136.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "pipecat-ai", extras = ["openai", "silero", "websocket"], specifier = ">=1.2.1" },
+    { name = "pipecat-ai", extras = ["cartesia", "openai", "silero", "websocket"], specifier = ">=1.2.1" },
     { name = "pipecatcloud", specifier = ">=0.7.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.14.1" },

@@ -17,9 +17,12 @@ to a separate Avaturn product; the two are not interchangeable.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PipelineKind = Literal["openai_realtime", "cascaded"]
 
 
 class Settings(BaseSettings):
@@ -77,16 +80,14 @@ class Settings(BaseSettings):
     )
     pipecat_cloud_api_url: str = Field(default="https://api.pipecat.daily.co")
 
-    # ----- Audio -------------------------------------------------------
-    # Mic-side sample rate; Avaturn Live supports 16 kHz or 24 kHz. Avatar
-    # output is always 24 kHz mono (a constant in serializer.py).
-    user_audio_sample_rate: int = Field(default=24000)
+    # ----- Pipeline selector ------------------------------------------
+    # Single source of truth for which pipeline build_pipeline() constructs.
+    # "openai_realtime" keeps the speech-to-speech default; "cascaded" wires
+    # Cartesia Ink Whisper STT → OpenAI LLM → Cartesia Sonic 3.5 TTS.
+    pipeline: PipelineKind = Field(default="openai_realtime")
 
-    # ----- OpenAI Realtime (the default pipeline) ---------------------
+    # ----- Shared LLM key (both pipelines) -----------------------------
     openai_api_key: SecretStr = Field(default=SecretStr(""))
-    openai_realtime_model: str = Field(default="gpt-realtime-1.5")
-    openai_realtime_voice: str = Field(default="alloy")
-    openai_realtime_transcribe_model: str = Field(default="gpt-4o-transcribe")
     system_prompt: str = Field(
         default=(
             "You are a friendly AI avatar in a real-time video chat. Keep responses "
@@ -95,8 +96,37 @@ class Settings(BaseSettings):
         )
     )
 
+    # ----- OpenAI Realtime (pipeline = "openai_realtime") --------------
+    openai_realtime_model: str = Field(default="gpt-realtime-1.5")
+    openai_realtime_voice: str = Field(default="alloy")
+    openai_realtime_transcribe_model: str = Field(default="gpt-4o-transcribe")
+
+    # ----- OpenAI LLM (pipeline = "cascaded") --------------------------
+    openai_llm_model: str = Field(default="gpt-5.5")
+
+    # ----- Cartesia (pipeline = "cascaded") ----------------------------
+    cartesia_api_key: SecretStr = Field(default=SecretStr(""))
+    cartesia_stt_model: str = Field(default="ink-whisper")
+    cartesia_tts_model: str = Field(default="sonic-3.5")
+    # Katie — Cartesia's recommended stable voice for voice agents on
+    # Sonic 3.5. Operators can override CARTESIA_VOICE with any voice id
+    # from their Cartesia library.
+    cartesia_voice: str = Field(default="f786b574-daa5-4673-aa0c-cbe3e8534c02")
+    cartesia_language: str = Field(default="en")
+
     # ----- Server ------------------------------------------------------
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+
+    @property
+    def user_audio_sample_rate(self) -> int:
+        """Mic-side PCM rate negotiated with Avaturn Live and used by the pipeline.
+
+        Cascaded pins to 16 kHz (Silero VAD + Smart Turn V3 constraint);
+        realtime stays at 24 kHz. Both the broker (Avaturn Live session
+        create) and the engine (pipeline params + serializer) read this so
+        the two ends always agree.
+        """
+        return 16000 if self.pipeline == "cascaded" else 24000
 
     @property
     def conversation_engine_ws_url(self) -> str:
