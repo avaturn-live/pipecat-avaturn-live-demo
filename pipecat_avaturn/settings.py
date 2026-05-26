@@ -22,7 +22,7 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-PipelineKind = Literal["openai_realtime", "cascaded"]
+PipelineKind = Literal["openai_realtime", "cascaded", "nvidia_nemotron"]
 
 
 class Settings(BaseSettings):
@@ -83,7 +83,9 @@ class Settings(BaseSettings):
     # ----- Pipeline selector ------------------------------------------
     # Single source of truth for which pipeline build_pipeline() constructs.
     # "openai_realtime" keeps the speech-to-speech default; "cascaded" wires
-    # Cartesia Ink Whisper STT → OpenAI LLM → Cartesia Sonic 3.5 TTS.
+    # Cartesia Ink Whisper STT → OpenAI LLM → Cartesia Sonic 3.5 TTS;
+    # "nvidia_nemotron" wires NVIDIA Nemotron ASR (Parakeet) → Nemotron 3
+    # Nano LLM → Magpie TTS.
     pipeline: PipelineKind = Field(default="openai_realtime")
 
     # ----- Shared LLM key (both pipelines) -----------------------------
@@ -114,6 +116,19 @@ class Settings(BaseSettings):
     cartesia_voice: str = Field(default="f786b574-daa5-4673-aa0c-cbe3e8534c02")
     cartesia_language: str = Field(default="en")
 
+    # ----- NVIDIA Nemotron (pipeline = "nvidia_nemotron") --------------
+    # One API key powers all three NVIDIA services. STT and TTS hit NVCF
+    # over gRPC; the LLM hits NIM over OpenAI-compatible REST. Endpoints
+    # are split (server vs base_url) because they're genuinely different
+    # URLs on different protocols — naming makes that explicit.
+    nvidia_api_key: SecretStr = Field(default=SecretStr(""))
+    nvidia_server: str = Field(default="grpc.nvcf.nvidia.com:443")
+    nvidia_llm_base_url: str = Field(default="https://integrate.api.nvidia.com/v1")
+    nvidia_llm_model: str = Field(default="nvidia/nemotron-3-nano-30b-a3b")
+    # Named `nvidia_voice` (not `nvidia_tts_voice`) for parallelism with
+    # `cartesia_voice` — STT/LLM have no "voice" concept, so no ambiguity.
+    nvidia_voice: str = Field(default="Magpie-Multilingual.EN-US.Aria")
+
     # ----- Server ------------------------------------------------------
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
 
@@ -121,12 +136,19 @@ class Settings(BaseSettings):
     def user_audio_sample_rate(self) -> int:
         """Mic-side PCM rate negotiated with Avaturn Live and used by the pipeline.
 
-        Cascaded pins to 16 kHz (Silero VAD + Smart Turn V3 constraint);
-        realtime stays at 24 kHz. Both the broker (Avaturn Live session
-        create) and the engine (pipeline params + serializer) read this so
-        the two ends always agree.
+        Cascaded pipelines (``cascaded``, ``nvidia_nemotron``) pin to 16 kHz
+        because they depend on Silero VAD + Smart Turn V3 (both 16-kHz
+        models). Realtime stays at 24 kHz — OpenAI Realtime accepts that
+        natively and no VAD sits in the user-input path. Both the broker
+        (Avaturn Live session create) and the engine (pipeline params +
+        serializer) read this so the two ends always agree.
+
         """
-        return 16000 if self.pipeline == "cascaded" else 24000
+        match self.pipeline:
+            case "openai_realtime":
+                return 24000
+            case "cascaded" | "nvidia_nemotron":
+                return 16000
 
     @property
     def conversation_engine_ws_url(self) -> str:

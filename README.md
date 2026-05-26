@@ -28,15 +28,16 @@ flowchart TB
     class Browser,Avaturn ext
 ```
 
-Two pipelines ship in this repo, selected by the `PIPELINE` env var:
+Three pipelines ship in this repo, selected by the `PIPELINE` env var:
 
 | `PIPELINE`         | Stack                                                                                    |
 |--------------------|------------------------------------------------------------------------------------------|
 | `openai_realtime`  | OpenAI Realtime (speech-to-speech in one service) — the **default**.                     |
 | `cascaded`         | Cartesia Ink Whisper STT → OpenAI `gpt-5.5` via the Responses API → Cartesia Sonic 3.5 TTS, with local Smart Turn V3 end-of-turn detection. Set `CARTESIA_API_KEY` to enable. |
+| `nvidia_nemotron`  | NVIDIA Nemotron ASR (Parakeet, streaming) → NVIDIA NIM Nemotron 3 Nano LLM → NVIDIA Magpie TTS, with the same local Smart Turn V3 end-of-turn detection as `cascaded`. Set `NVIDIA_API_KEY` to enable. |
 
 Everything below the pipeline (transport, segment processor, wire format)
-is identical for both modes.
+is identical for all three modes.
 
 ---
 
@@ -116,13 +117,18 @@ pcc secrets set avaturn-live-demo OPENAI_API_KEY=sk-...
 # When PIPELINE=cascaded, also set the Cartesia key as a pcc secret:
 # pcc secrets set avaturn-live-demo CARTESIA_API_KEY=...
 # (And `PIPELINE=cascaded` itself — secrets double as the agent's env.)
+# When PIPELINE=nvidia_nemotron, set NVIDIA_API_KEY instead:
+# pcc secrets set avaturn-live-demo NVIDIA_API_KEY=...
+# (And `PIPELINE=nvidia_nemotron`.)
 pcc deploy --yes
 ```
 
 > The cascaded pipeline's keys (`CARTESIA_API_KEY`, optionally
-> `OPENAI_LLM_MODEL` / `CARTESIA_VOICE` overrides) live in **pcc secrets** in
-> PCC mode — never in `.env`. The local `.env` is only consulted by the
-> self-host process (`server.py`).
+> `OPENAI_LLM_MODEL` / `CARTESIA_VOICE` overrides), and the NVIDIA Nemotron
+> pipeline's key (`NVIDIA_API_KEY`, optionally `NVIDIA_LLM_MODEL` /
+> `NVIDIA_VOICE` overrides), live in **pcc secrets** in PCC mode — never in
+> `.env`. The local `.env` is only consulted by the self-host process
+> (`server.py`).
 
 `pcc-deploy.toml` already sets `websocket_auth = "token"`, so PCC issues
 a short-lived HMAC token per session and rejects unauthenticated WS
@@ -205,9 +211,9 @@ All settings are read from environment variables (or `.env`).
 The **broker** vars (`AVATURN_LIVE_*`, `CONVERSATION_ENGINE_*`,
 `PIPECAT_CLOUD_*`) always live in `.env` of whichever process runs the
 broker. The **agent** vars (`OPENAI_API_KEY`, `CARTESIA_API_KEY`,
-`PIPELINE`, model/voice overrides, `SYSTEM_PROMPT`) live in `.env` for
-self-host and in **pcc secrets** for Pipecat Cloud deployments — never
-both at once.
+`NVIDIA_API_KEY`, `PIPELINE`, model/voice overrides, `SYSTEM_PROMPT`) live
+in `.env` for self-host and in **pcc secrets** for Pipecat Cloud
+deployments — never both at once.
 
 | Variable                              | Purpose                                            |
 |---------------------------------------|----------------------------------------------------|
@@ -219,8 +225,8 @@ both at once.
 | `CONVERSATION_ENGINE_SHARED_SECRET`   | Bearer token Avaturn Live must send. Required when the engine is internet-facing — without it, anyone who finds the WS URL can attach. |
 | `PIPECAT_CLOUD_PUBLIC_KEY`            | PCC project public key (only in PCC mode)          |
 | `PIPECAT_CLOUD_AGENT_NAME`            | Deployed PCC agent name (only in PCC mode)         |
-| `PIPELINE`                            | `openai_realtime` (default) or `cascaded`          |
-| `OPENAI_API_KEY`                      | OpenAI API key (both pipelines)                    |
+| `PIPELINE`                            | `openai_realtime` (default), `cascaded`, or `nvidia_nemotron` |
+| `OPENAI_API_KEY`                      | OpenAI API key (both OpenAI pipelines)             |
 | `OPENAI_REALTIME_MODEL`               | Realtime model, e.g. `gpt-realtime-1.5`            |
 | `OPENAI_REALTIME_VOICE`               | Realtime voice (`alloy`, `echo`, …)                |
 | `OPENAI_LLM_MODEL`                    | Cascaded LLM model (Responses API), default `gpt-5.5` |
@@ -229,6 +235,11 @@ both at once.
 | `CARTESIA_TTS_MODEL`                  | Cartesia TTS model, default `sonic-3.5`            |
 | `CARTESIA_VOICE`                      | Cartesia voice id, default Katie                   |
 | `CARTESIA_LANGUAGE`                   | Cartesia STT/TTS language, default `en`            |
+| `NVIDIA_API_KEY`                      | NVIDIA API key (required when `PIPELINE=nvidia_nemotron`) |
+| `NVIDIA_SERVER`                       | gRPC endpoint for STT + TTS, default `grpc.nvcf.nvidia.com:443` |
+| `NVIDIA_LLM_BASE_URL`                 | REST endpoint for LLM, default `https://integrate.api.nvidia.com/v1` |
+| `NVIDIA_LLM_MODEL`                    | NIM LLM model, default `nvidia/nemotron-3-nano-30b-a3b` |
+| `NVIDIA_VOICE`                        | Magpie voice id, default `Magpie-Multilingual.EN-US.Aria` |
 | `SYSTEM_PROMPT`                       | System prompt the LLM is bootstrapped with         |
 
 ---

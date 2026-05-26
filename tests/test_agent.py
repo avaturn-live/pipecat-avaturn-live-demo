@@ -31,6 +31,7 @@ def _settings(pipeline: PipelineKind) -> Settings:
         pipeline=pipeline,
         openai_api_key=SecretStr("test-openai-key"),
         cartesia_api_key=SecretStr("test-cartesia-key"),
+        nvidia_api_key=SecretStr("test-nvidia-key"),
     )
 
 
@@ -80,7 +81,25 @@ def test_build_pipeline_dispatches_to_cascaded() -> None:
     assert "OpenAIRealtimeLLMService" not in names
 
 
-@pytest.mark.parametrize("pipeline", ["openai_realtime", "cascaded"])
+def test_build_pipeline_dispatches_to_nvidia_nemotron() -> None:
+    task, transport = build_pipeline(_stub_websocket(), settings=_settings("nvidia_nemotron"))
+
+    assert task is not None
+    assert transport is not None
+    names = _processor_type_names(task)
+    assert {
+        "NvidiaSTTService",
+        "NvidiaLLMService",
+        "NvidiaTTSService",
+        "BotSpeechSegmentProcessor",
+    } <= names
+    # Realtime and Cartesia services must NOT appear in the NVIDIA pipeline.
+    assert "OpenAIRealtimeLLMService" not in names
+    assert "CartesiaSTTService" not in names
+    assert "CartesiaTTSService" not in names
+
+
+@pytest.mark.parametrize("pipeline", ["openai_realtime", "cascaded", "nvidia_nemotron"])
 def test_build_pipeline_returns_transport(pipeline: PipelineKind) -> None:
     """Transport is the second tuple element regardless of pipeline choice."""
     _task, transport = build_pipeline(_stub_websocket(), settings=_settings(pipeline))

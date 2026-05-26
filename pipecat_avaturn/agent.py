@@ -1,6 +1,6 @@
 """Build and run the Pipecat pipeline that drives an Avaturn Live avatar.
 
-Two pipelines live behind one entry point. ``settings.pipeline`` is the
+Three pipelines live behind one entry point. ``settings.pipeline`` is the
 single source of truth for which one ``build_pipeline`` constructs:
 
 * ``"openai_realtime"`` — OpenAI Realtime (speech-to-speech in one service).
@@ -13,7 +13,12 @@ single source of truth for which one ``build_pipeline`` constructs:
   Silero VAD as the end-of-turn detector. Turn detection here is explicit
   because no single service owns it.
 
-What is invariant across both pipelines:
+* ``"nvidia_nemotron"`` — NVIDIA Nemotron ASR (Parakeet, streaming) →
+  NVIDIA NIM Nemotron 3 Nano LLM → NVIDIA Magpie TTS, with the same local
+  Smart Turn V3 + Silero VAD end-of-turn stack as ``cascaded``. STT and TTS
+  hit NVCF over gRPC; the LLM hits NIM over OpenAI-compatible REST.
+
+What is invariant across all three pipelines:
 
 * ``AvaturnLiveFastAPIWebsocketTransport`` — pacing-disabled FastAPI WS.
 * ``AvaturnLiveFrameSerializer`` — Avaturn Live wire-format boundary.
@@ -237,6 +242,84 @@ def _build_cascaded_pipeline(
     return _pipeline_task(pipeline, settings=settings), transport
 
 
+def _build_nvidia_nemotron_pipeline(
+    websocket: WebSocket, *, settings: Settings
+) -> tuple[PipelineTask, AvaturnLiveFastAPIWebsocketTransport]:
+    from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
+    from pipecat.audio.vad.silero import SileroVADAnalyzer
+    from pipecat.services.nvidia.llm import NvidiaLLMService
+    from pipecat.services.nvidia.stt import NvidiaSTTService
+    from pipecat.services.nvidia.tts import NvidiaTTSService
+    from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
+    from pipecat.turns.user_turn_strategies import UserTurnStrategies
+
+    transport = _build_transport(websocket, settings=settings)
+    api_key = settings.nvidia_api_key.get_secret_value()
+
+    # STT defaults to the streaming Parakeet-based Nemotron ASR
+    # (nemotron-asr-streaming) via pipecat's bundled model_function_map.
+    stt = NvidiaSTTService(
+        api_key=api_key,
+        server=settings.nvidia_server,
+        sample_rate=settings.user_audio_sample_rate,
+    )
+
+    # NvidiaLLMService subclasses OpenAILLMService — system prompt enters
+    # via Settings.system_instruction (BaseOpenAILLMService.Settings field),
+    # same pattern as the cascaded path's OpenAIResponsesLLMService.
+    llm = NvidiaLLMService(
+        api_key=api_key,
+        base_url=settings.nvidia_llm_base_url,
+        settings=NvidiaLLMService.Settings(
+            model=settings.nvidia_llm_model,
+            system_instruction=settings.system_prompt,
+        ),
+    )
+
+    # Pin TTS to AVATURN_LIVE_AUDIO_OUT_SAMPLE_RATE so Magpie's gRPC stream
+    # emits bytes the serializer can pass through to Avaturn Live (24 kHz
+    # mono PCM16LE) without resampling.
+    tts = NvidiaTTSService(
+        api_key=api_key,
+        server=settings.nvidia_server,
+        sample_rate=AVATURN_LIVE_AUDIO_OUT_SAMPLE_RATE,
+        settings=NvidiaTTSService.Settings(voice=settings.nvidia_voice),
+    )
+
+    # Same end-of-turn stack as cascaded — no single service owns turn
+    # detection in a cascaded topology.
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+        LLMContext(),
+        user_params=LLMUserAggregatorParams(
+            user_turn_strategies=UserTurnStrategies(
+                stop=[
+                    TurnAnalyzerUserTurnStopStrategy(
+                        turn_analyzer=LocalSmartTurnAnalyzerV3(),
+                    ),
+                ],
+            ),
+            vad_analyzer=SileroVADAnalyzer(),
+        ),
+    )
+
+    _wire_turn_logging(user_aggregator, assistant_aggregator)
+
+    pipeline = Pipeline(
+        [
+            transport.input(),
+            stt,
+            user_aggregator,
+            llm,
+            tts,
+            BotSpeechSegmentProcessor(),
+            transport.output(),
+            assistant_aggregator,
+        ]
+    )
+
+    return _pipeline_task(pipeline, settings=settings), transport
+
+
 def build_pipeline(
     websocket: WebSocket,
     *,
@@ -247,6 +330,8 @@ def build_pipeline(
             return _build_openai_realtime_pipeline(websocket, settings=settings)
         case "cascaded":
             return _build_cascaded_pipeline(websocket, settings=settings)
+        case "nvidia_nemotron":
+            return _build_nvidia_nemotron_pipeline(websocket, settings=settings)
 
 
 async def run_agent(websocket: WebSocket, *, settings: Settings | None = None) -> None:
