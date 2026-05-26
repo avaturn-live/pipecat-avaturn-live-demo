@@ -228,16 +228,16 @@ deployments — never both at once.
 | `PIPELINE`                            | `openai_realtime` (default), `cascaded`, or `nvidia_nemotron` |
 | `OPENAI_API_KEY`                      | OpenAI API key (both OpenAI pipelines)             |
 | `OPENAI_REALTIME_MODEL`               | Realtime model, e.g. `gpt-realtime-1.5`            |
-| `OPENAI_REALTIME_VOICE`               | Realtime voice (`alloy`, `echo`, …)                |
+| `OPENAI_REALTIME_VOICE`               | Realtime voice, default `cedar` (others: `ash`, `verse`, `echo`, …) |
 | `OPENAI_LLM_MODEL`                    | Cascaded LLM model (Responses API), default `gpt-5.5` |
 | `CARTESIA_API_KEY`                    | Cartesia API key (required when `PIPELINE=cascaded`) |
 | `CARTESIA_STT_MODEL`                  | Cartesia STT model, default `ink-whisper`          |
 | `CARTESIA_TTS_MODEL`                  | Cartesia TTS model, default `sonic-3.5`            |
-| `CARTESIA_VOICE`                      | Cartesia voice id, default Katie                   |
+| `CARTESIA_VOICE`                      | Cartesia voice id, default male Sonic 3.5 voice    |
 | `CARTESIA_LANGUAGE`                   | Cartesia STT/TTS language, default `en`            |
 | `NVIDIA_API_KEY`                      | NVIDIA API key (required when `PIPELINE=nvidia_nemotron`) |
 | `NVIDIA_SERVER`                       | gRPC endpoint for STT + TTS, default `grpc.nvcf.nvidia.com:443` |
 | `NVIDIA_LLM_BASE_URL`                 | REST endpoint for LLM, default `https://integrate.api.nvidia.com/v1` |
 | `NVIDIA_LLM_MODEL`                    | NIM LLM model, default `nvidia/nemotron-3-nano-30b-a3b` |
-| `NVIDIA_VOICE`                        | Magpie voice id, default `Magpie-Multilingual.EN-US.Aria` |
+| `NVIDIA_VOICE`                        | Magpie voice id, default `Magpie-Multilingual.EN-US.Leo` |
 | `SYSTEM_PROMPT`                       | System prompt the LLM is bootstrapped with         |

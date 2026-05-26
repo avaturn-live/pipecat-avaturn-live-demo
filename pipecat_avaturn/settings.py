@@ -38,7 +38,7 @@ class Settings(BaseSettings):
         description="Avaturn Live project API key. Required for the session broker.",
     )
     avaturn_live_default_avatar_id: str = Field(
-        default="jane_20240829_white_realtime",
+        default="vibecoding_ceo",
         description="Avatar id used when the frontend doesn't specify one.",
     )
 
@@ -100,7 +100,7 @@ class Settings(BaseSettings):
 
     # ----- OpenAI Realtime (pipeline = "openai_realtime") --------------
     openai_realtime_model: str = Field(default="gpt-realtime-1.5")
-    openai_realtime_voice: str = Field(default="alloy")
+    openai_realtime_voice: str = Field(default="cedar")
     openai_realtime_transcribe_model: str = Field(default="gpt-4o-transcribe")
 
     # ----- OpenAI LLM (pipeline = "cascaded") --------------------------
@@ -110,10 +110,9 @@ class Settings(BaseSettings):
     cartesia_api_key: SecretStr = Field(default=SecretStr(""))
     cartesia_stt_model: str = Field(default="ink-whisper")
     cartesia_tts_model: str = Field(default="sonic-3.5")
-    # Katie — Cartesia's recommended stable voice for voice agents on
-    # Sonic 3.5. Operators can override CARTESIA_VOICE with any voice id
-    # from their Cartesia library.
-    cartesia_voice: str = Field(default="f786b574-daa5-4673-aa0c-cbe3e8534c02")
+    # Default male Cartesia voice on Sonic 3.5. Operators can override
+    # CARTESIA_VOICE with any voice id from their Cartesia library.
+    cartesia_voice: str = Field(default="7d444628-dd13-442b-b687-71a6baf0c07e")
     cartesia_language: str = Field(default="en")
 
     # ----- NVIDIA Nemotron (pipeline = "nvidia_nemotron") --------------
@@ -127,7 +126,7 @@ class Settings(BaseSettings):
     nvidia_llm_model: str = Field(default="nvidia/nemotron-3-nano-30b-a3b")
     # Named `nvidia_voice` (not `nvidia_tts_voice`) for parallelism with
     # `cartesia_voice` — STT/LLM have no "voice" concept, so no ambiguity.
-    nvidia_voice: str = Field(default="Magpie-Multilingual.EN-US.Aria")
+    nvidia_voice: str = Field(default="Magpie-Multilingual.EN-US.Leo")
 
     # ----- Server ------------------------------------------------------
     cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
