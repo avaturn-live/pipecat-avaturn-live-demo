@@ -241,9 +241,3 @@ deployments — never both at once.
 | `NVIDIA_LLM_MODEL`                    | NIM LLM model, default `nvidia/nemotron-3-nano-30b-a3b` |
 | `NVIDIA_VOICE`                        | Magpie voice id, default `Magpie-Multilingual.EN-US.Aria` |
 | `SYSTEM_PROMPT`                       | System prompt the LLM is bootstrapped with         |
-
----
-
-## License
-
-MIT — do whatever you want with it. PRs welcome.
